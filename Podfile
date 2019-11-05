@@ -1,12 +1,13 @@
-platform :ios, '9.0'
+platform :ios, '10.0'
 
 target 'TrustKeystore' do
   use_frameworks!
 
-  pod 'BigInt'
-  pod 'CryptoSwift', '~> 0.8.1'
-  pod 'TrezorCrypto', inhibit_warnings: true
-  pod 'TrustCore', inhibit_warnings: true
+  pod 'BigInt', inhibit_warnings: true
+  pod 'CryptoSwift', '~> 0.10.0'
+  pod 'TrezorCrypto', '~> 0.0.9', inhibit_warnings: true
+  #pod 'TrustCore', :git=>'https://github.com/TrustWallet/trust-core', :branch=> 'master', inhibit_warnings: true
+  pod 'TrustCore', :git => 'https://github.com/i-stack/TrustCore.git', :commit => 'bff6659c1b93bdd541c05f23ae90df7f098af617'
   pod 'SwiftLint'
 
   target 'KeystoreBenchmark'
