@@ -11,34 +11,61 @@ import TrustCore
 
 /// Key definition.
 public struct KeystoreKey {
-    /// Wallet type.
-    public var type: WalletType
+    /// Ethereum address.
+    public var address: TrustCore.Address
+
+    /// Account type.
+    public var type: AccountType
 
     /// Wallet UUID, optional.
     public var id: String?
-
-    /// Key's address
-    public var address: Address?
 
     /// Key header with encrypted private key and crypto parameters.
     public var crypto: KeystoreKeyHeader
 
     /// Mnemonic passphrase
     public var passphrase = ""
+    public var mnemonic: String?
+
+    /// Mnemonic derivation path
+    public var derivationPath = Wallet.defaultPath
 
     /// Key version, must be 3.
     public var version = 3
 
-    /// Default coin for this key.
-    public var coin: SLIP.CoinType?
-
-    /// List of active accounts.
-    public var activeAccounts = [Account]()
-
     /// Creates a new `Key` with a password.
-    public init(password: String) throws {
-        let mnemonic = Crypto.generateMnemonic(strength: 128)
-        try self.init(password: password, mnemonic: mnemonic, passphrase: "")
+    @available(iOS 10.0, *)
+    public init(password: String, type: AccountType) throws {
+        switch type {
+        case .encryptedKey:
+            let privateAttributes: [String: Any] = [
+                kSecAttrIsExtractable as String: true,
+            ]
+            let parameters: [String: Any] = [
+                kSecAttrKeyType as String: kSecAttrKeyTypeEC,
+                kSecAttrKeySizeInBits as String: 256,
+                kSecPrivateKeyAttrs as String: privateAttributes,
+            ]
+
+            var pubKey: SecKey?
+            var privKey: SecKey?
+            let status = SecKeyGeneratePair(parameters as CFDictionary, &pubKey, &privKey)
+            guard let privateKey = privKey, status == noErr else {
+                fatalError("Failed to generate key pair")
+            }
+
+            guard let keyRepresentation = SecKeyCopyExternalRepresentation(privateKey, nil) as Data? else {
+                fatalError("Failed to extract new private key")
+            }
+            
+            let key = keyRepresentation[(keyRepresentation.count - 32)...]
+            print("创建了私钥\(key.hexString)")
+            try self.init(password: password, key: key)
+        case .hierarchicalDeterministicWallet:
+            let mnemonic = Mnemonic.generate(strength: 128)
+            print("助记词\(mnemonic)")
+            try self.init(password: password, mnemonic: mnemonic, passphrase: "")
+        }
     }
 
     /// Initializes a `Key` from a JSON wallet.
@@ -48,15 +75,17 @@ public struct KeystoreKey {
     }
 
     /// Initializes a `Key` by encrypting a private key with a password.
-    public init(password: String, key: PrivateKey, coin: SLIP.CoinType?) throws {
+    public init(password: String, key: Data) throws {
         id = UUID().uuidString.lowercased()
-        crypto = try KeystoreKeyHeader(password: password, data: key.data)
-        self.type = .encryptedKey
-        self.coin = coin
+        crypto = try KeystoreKeyHeader(password: password, data: key)
+
+        let pubKey = EthereumCrypto.getPublicKey(from: key)
+        address = KeystoreKey.decodeAddress(from: pubKey)
+        type = .encryptedKey
     }
 
     /// Initializes a `Key` by encrypting a mnemonic phrase with a password.
-    public init(password: String, mnemonic: String, passphrase: String = "") throws {
+    public init(password: String, mnemonic: String, passphrase: String = "", derivationPath: String = Wallet.defaultPath) throws {
         id = UUID().uuidString.lowercased()
 
         guard let cstring = mnemonic.cString(using: .ascii) else {
@@ -65,8 +94,29 @@ public struct KeystoreKey {
         let data = Data(bytes: cstring.map({ UInt8($0) }))
         crypto = try KeystoreKeyHeader(password: password, data: data)
 
+        let key = Wallet(mnemonic: mnemonic, passphrase: passphrase, path: derivationPath).getKey(at: 0)
+        let pubKey = key.publicKey
+        address = KeystoreKey.decodeAddress(from: pubKey)
+        print("私钥: \(key.privateKey.hexString)")
         type = .hierarchicalDeterministicWallet
         self.passphrase = passphrase
+        self.mnemonic = mnemonic
+        self.derivationPath = derivationPath
+    }
+
+    /// Decodes an Ethereum address from a public key.
+    static func decodeAddress(from publicKey: Data) -> TrustCore.Address {
+        print("公钥处理")
+        precondition(publicKey.count == 65, "Expect 64-byte public key")
+        precondition(publicKey[0] == 4, "Invalid public key")
+        print("公钥处理1")
+        var sha3 = publicKey[1...].sha3(.keccak256)
+        //个人修改
+        var data = Data(hex: "41")
+        data.append(sha3[12..<32])
+        //个人修改
+        print("公钥处理2")
+        return TrustCore.Address(data: data)
     }
 
     /// Decrypts the key and returns the private key.
@@ -89,10 +139,10 @@ public struct KeystoreKey {
         let decryptedPK: [UInt8]
         switch crypto.cipher {
         case "aes-128-ctr":
-            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: CTR(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
+            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: .CTR(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
             decryptedPK = try aesCipher.decrypt(crypto.cipherText.bytes)
         case "aes-128-cbc":
-            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: CBC(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
+            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: .CBC(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
             decryptedPK = try aesCipher.decrypt(crypto.cipherText.bytes)
         default:
             throw DecryptError.unsupportedCipher
@@ -107,12 +157,74 @@ public struct KeystoreKey {
         data.append(key)
         return data.sha3(.keccak256)
     }
+
+    /// Signs a hash with the given password.
+    ///
+    /// - Parameters:
+    ///   - hash: hash to sign
+    ///   - password: key password
+    /// - Returns: signature
+    /// - Throws: `DecryptError` or `Secp256k1Error`
+    public func sign(hash: Data, password: String) throws -> Data {
+        switch type {
+        case .encryptedKey:
+            var key = try decrypt(password: password)
+            defer {
+                // Clear memory after signing
+                key.resetBytes(in: 0..<key.count)
+            }
+            return EthereumCrypto.sign(hash: hash, privateKey: key)
+        case .hierarchicalDeterministicWallet:
+            guard var mnemonic = String(data: try decrypt(password: password), encoding: .ascii) else {
+                throw DecryptError.invalidPassword
+            }
+            defer {
+                // Clear memory after signing
+                mnemonic.withMutableCharacters { chars in
+                    chars.replaceSubrange(chars.startIndex ..< chars.endIndex, with: [Character](repeating: " ", count: chars.count))
+                }
+            }
+            let wallet = Wallet(mnemonic: mnemonic, passphrase: passphrase, path: derivationPath)
+            return EthereumCrypto.sign(hash: hash, privateKey: wallet.getKey(at: 0).privateKey)
+        }
+    }
+
+    /// Signs multiple hashes with the given password.
+    ///
+    /// - Parameters:
+    ///   - hashes: array of hashes to sign
+    ///   - password: key password
+    /// - Returns: [signature]
+    /// - Throws: `DecryptError` or `Secp256k1Error`
+    public func signHashes(_ hashes: [Data], password: String) throws -> [Data] {
+        switch type {
+        case .encryptedKey:
+            var key = try decrypt(password: password)
+            defer {
+                // Clear memory after signing
+                key.resetBytes(in: 0..<key.count)
+            }
+            return hashes.map({ EthereumCrypto.sign(hash: $0, privateKey: key) })
+        case .hierarchicalDeterministicWallet:
+            guard var mnemonic = String(data: try decrypt(password: password), encoding: .ascii) else {
+                throw DecryptError.invalidPassword
+            }
+            defer {
+                // Clear memory after signing
+                mnemonic.withMutableCharacters { chars in
+                    chars.replaceSubrange(chars.startIndex ..< chars.endIndex, with: [Character](repeating: " ", count: chars.count))
+                }
+            }
+            let wallet = Wallet(mnemonic: mnemonic)
+            let key = wallet.getKey(at: 0).privateKey
+            return hashes.map({ EthereumCrypto.sign(hash: $0, privateKey: key) })
+        }
+    }
 }
 
 public enum DecryptError: Error {
     case unsupportedKDF
     case unsupportedCipher
-    case unsupportedCoin
     case invalidCipher
     case invalidPassword
 }
@@ -127,9 +239,8 @@ extension KeystoreKey: Codable {
         case type
         case id
         case crypto
-        case activeAccounts
+        case derivationPath
         case version
-        case coin
     }
 
     enum UppercaseCodingKeys: String, CodingKey {
@@ -145,9 +256,11 @@ extension KeystoreKey: Codable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         let altValues = try decoder.container(keyedBy: UppercaseCodingKeys.self)
 
+        address = TrustCore.Address(data: try values.decodeHexString(forKey: .address))
         switch try values.decodeIfPresent(String.self, forKey: .type) {
         case TypeString.mnemonic?:
             type = .hierarchicalDeterministicWallet
+            derivationPath = try values.decodeIfPresent(String.self, forKey: .derivationPath) ?? Wallet.defaultPath
         default:
             type = .encryptedKey
         }
@@ -160,39 +273,21 @@ extension KeystoreKey: Codable {
             self.crypto = try altValues.decode(KeystoreKeyHeader.self, forKey: .crypto)
         }
         version = try values.decode(Int.self, forKey: .version)
-        coin = try values.decodeIfPresent(SLIP.CoinType.self, forKey: .coin)
-        address = try values.decodeIfPresent(String.self, forKey: .address).flatMap({
-            return KeystoreKey.address(for: coin, addressString: $0)
-        })
-        activeAccounts = try values.decodeIfPresent([Account].self, forKey: .activeAccounts) ?? []
-
-        if let address = address, activeAccounts.isEmpty {
-            let account = Account(wallet: .none, address: address, derivationPath: Ethereum().derivationPath(at: 0))
-            activeAccounts.append(account)
-        }
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(address.description.drop0x(), forKey: .address)
         switch type {
         case .encryptedKey:
             try container.encode(TypeString.privateKey, forKey: .type)
         case .hierarchicalDeterministicWallet:
             try container.encode(TypeString.mnemonic, forKey: .type)
+            try container.encode(derivationPath, forKey: .derivationPath)
         }
         try container.encode(id, forKey: .id)
-        try container.encodeIfPresent(address?.description, forKey: .address)
         try container.encode(crypto, forKey: .crypto)
         try container.encode(version, forKey: .version)
-        try container.encode(activeAccounts, forKey: .activeAccounts)
-        try container.encodeIfPresent(coin, forKey: .coin)
-    }
-
-    public static func address(for coin: SLIP.CoinType?, addressString: String) -> Address? {
-        guard let coin = coin else {
-            return EthereumAddress(data: Data(hex: addressString))
-        }
-        return blockchain(coin: coin).address(string: addressString)
     }
 }
 
@@ -202,20 +297,5 @@ private extension String {
             return String(dropFirst(2))
         }
         return self
-    }
-}
-
-extension SLIP.CoinType: Codable {
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let coinID = try container.decode(Int.self)
-        guard let slip = SLIP.CoinType(rawValue: coinID) else {
-            throw DecryptError.unsupportedCoin
-        }
-        self = slip
-    }
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(self.rawValue)
     }
 }
