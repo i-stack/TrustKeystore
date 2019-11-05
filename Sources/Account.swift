@@ -7,6 +7,9 @@
 import Foundation
 import TrustCore
 
+
+
+
 /// Ethereum account representation.
 public struct Account: Hashable {
     /// Ethereum 20-byte account address derived from the key.
