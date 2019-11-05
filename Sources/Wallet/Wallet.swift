@@ -8,7 +8,8 @@ import TrezorCrypto
 
 /// A hierarchical deterministic wallet.
 public class Wallet {
-    public static let defaultPath = "m/44'/60'/0'/0/x"
+//    public static let defaultPath = "m/44'/195'/x'"
+    public static let defaultPath = "m/44'/195'/0'/0/0"
 
     /// Wallet seed.
     public var seed: Data
@@ -28,6 +29,14 @@ public class Wallet {
         self.mnemonic = mnemonic
         self.passphrase = ""
         self.path = path
+    }
+    
+    /// Initializes a wallet from a mnemonic string and a passphrase.
+    public init(mnemonic: String, newPassphrase: String) {
+        seed = Mnemonic.deriveSeed(mnemonic: mnemonic, passphrase: newPassphrase)
+        self.mnemonic = mnemonic
+        self.passphrase = ""
+        self.path = Wallet.defaultPath
     }
 
     private func getDerivationPath(for index: Int) -> DerivationPath {

@@ -67,6 +67,11 @@ public final class KeyStore {
         accountsByAddress[key.address] = account
         return account
     }
+    
+    public func addAccount(account: Account) throws {
+        try save(account: account, in: keyDirectory)
+        accountsByAddress[account.address] = account
+    }
 
     /// Imports an encrypted JSON key.
     ///
@@ -111,7 +116,8 @@ public final class KeyStore {
         }
 
         let wallet = Wallet(mnemonic: mnemonic, passphrase: passphrase, path: derivationPath)
-        let address = wallet.getKey(at: 0).address
+        let pubKey = wallet.getKey(at: 0).publicKey
+        let address = KeystoreKey.decodeAddress(from: pubKey)
         if self.account(for: address) != nil {
             throw Error.accountAlreadyExists
         }
@@ -122,7 +128,7 @@ public final class KeyStore {
         let url = makeAccountURL(for: address)
         let account = Account(address: address, type: .hierarchicalDeterministicWallet, url: url)
         try save(account: account, in: keyDirectory)
-        accountsByAddress[address] = account
+        accountsByAddress[newKey.address] = account
 
         return account
     }
@@ -181,6 +187,37 @@ public final class KeyStore {
                 throw EncryptError.invalidMnemonic
             }
             return Wallet(mnemonic: string, passphrase: key.passphrase, path: key.derivationPath).getKey(at: 0).privateKey
+        }
+    }
+    
+    /// Exports a account as a mnemonic phrase.
+    ///
+    /// - Parameters:
+    ///   - account: account to export
+    ///   - password: account password
+    /// - Returns: mnemonic phrase
+    /// - Throws: `EncryptError.invalidMnemonic` if the account is not an HD wallet.
+    public func exportMnemonic(account: Account, password: String) throws -> String {
+        guard let key = keysByAddress[account.address] else {
+            fatalError("Missing account key")
+        }
+        var data = try key.decrypt(password: password)
+        defer {
+            data.resetBytes(in: 0 ..< data.count)
+        }
+        
+        switch key.type {
+        case .encryptedKey:
+            throw EncryptError.invalidMnemonic
+        case .hierarchicalDeterministicWallet:
+            guard let string = String(data: data, encoding: .ascii) else {
+                throw EncryptError.invalidMnemonic
+            }
+            if string.hasSuffix("\0") {
+                return String(string.dropLast())
+            } else {
+                return string
+            }
         }
     }
 
@@ -297,5 +334,29 @@ public final class KeyStore {
     private func save(key: KeystoreKey, to url: URL) throws {
         let json = try JSONEncoder().encode(key)
         try json.write(to: url, options: [.atomicWrite])
+    }
+}
+
+extension KeyStore {
+    public func checkingAccountAlreadyExists(json: Data, password: String, newPassword: String) throws -> Bool {
+        let key = try JSONDecoder().decode(KeystoreKey.self, from: json)
+        if self.account(for: key.address) != nil {
+            throw Error.accountAlreadyExists
+        }
+        return false
+    }
+
+    public func checkingAccountAlreadyExists(mnemonic: String, passphrase: String = "", derivationPath: String = Wallet.defaultPath, encryptPassword: String) throws -> Bool {
+        if !Mnemonic.isValid(mnemonic) {
+            throw Error.invalidMnemonic
+        }
+        
+        let wallet = Wallet(mnemonic: mnemonic, passphrase: passphrase, path: derivationPath)
+        let pubKey = wallet.getKey(at: 0).publicKey
+        let address = KeystoreKey.decodeAddress(from: pubKey)
+        if self.account(for: address) != nil {
+            throw Error.accountAlreadyExists
+        }
+        return false
     }
 }

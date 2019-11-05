@@ -12,7 +12,7 @@ import TrustCore
 /// Key definition.
 public struct KeystoreKey {
     /// Ethereum address.
-    public var address: Address
+    public var address: TrustCore.Address
 
     /// Account type.
     public var type: AccountType
@@ -25,6 +25,7 @@ public struct KeystoreKey {
 
     /// Mnemonic passphrase
     public var passphrase = ""
+    public var mnemonic: String?
 
     /// Mnemonic derivation path
     public var derivationPath = Wallet.defaultPath
@@ -56,10 +57,13 @@ public struct KeystoreKey {
             guard let keyRepresentation = SecKeyCopyExternalRepresentation(privateKey, nil) as Data? else {
                 fatalError("Failed to extract new private key")
             }
+            
             let key = keyRepresentation[(keyRepresentation.count - 32)...]
+            print("创建了私钥\(key.hexString)")
             try self.init(password: password, key: key)
         case .hierarchicalDeterministicWallet:
-            let mnemonic = Mnemonic.generate(strength: 256)
+            let mnemonic = Mnemonic.generate(strength: 128)
+            print("助记词\(mnemonic)")
             try self.init(password: password, mnemonic: mnemonic, passphrase: "")
         }
     }
@@ -91,18 +95,28 @@ public struct KeystoreKey {
         crypto = try KeystoreKeyHeader(password: password, data: data)
 
         let key = Wallet(mnemonic: mnemonic, passphrase: passphrase, path: derivationPath).getKey(at: 0)
-        address = key.address
+        let pubKey = key.publicKey
+        address = KeystoreKey.decodeAddress(from: pubKey)
+        print("私钥: \(key.privateKey.hexString)")
         type = .hierarchicalDeterministicWallet
         self.passphrase = passphrase
+        self.mnemonic = mnemonic
         self.derivationPath = derivationPath
     }
 
     /// Decodes an Ethereum address from a public key.
-    static func decodeAddress(from publicKey: Data) -> Address {
+    static func decodeAddress(from publicKey: Data) -> TrustCore.Address {
+        print("公钥处理")
         precondition(publicKey.count == 65, "Expect 64-byte public key")
         precondition(publicKey[0] == 4, "Invalid public key")
-        let sha3 = publicKey[1...].sha3(.keccak256)
-        return Address(data: sha3[12..<32])
+        print("公钥处理1")
+        var sha3 = publicKey[1...].sha3(.keccak256)
+        //个人修改
+        var data = Data(hex: "41")
+        data.append(sha3[12..<32])
+        //个人修改
+        print("公钥处理2")
+        return TrustCore.Address(data: data)
     }
 
     /// Decrypts the key and returns the private key.
@@ -242,7 +256,7 @@ extension KeystoreKey: Codable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         let altValues = try decoder.container(keyedBy: UppercaseCodingKeys.self)
 
-        address = Address(data: try values.decodeHexString(forKey: .address))
+        address = TrustCore.Address(data: try values.decodeHexString(forKey: .address))
         switch try values.decodeIfPresent(String.self, forKey: .type) {
         case TypeString.mnemonic?:
             type = .hierarchicalDeterministicWallet

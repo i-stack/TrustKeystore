@@ -37,7 +37,7 @@ public final class Mnemonic {
     /// - Parameter string: mnemonic string
     /// - Returns: `true` if the string is valid; `false` otherwise.
     public static func isValid(_ string: String) -> Bool {
-        return mnemonic_check(string) != 0
+        return mnemonic_check(string.cString(using: String.Encoding.ascii)) != 0
     }
 
     /// Derives the wallet seed.
