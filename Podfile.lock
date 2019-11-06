@@ -1,29 +1,47 @@
 PODS:
-  - BigInt (3.0.1):
-    - SipHash (~> 1.2)
-  - CryptoSwift (0.8.3)
-  - SipHash (1.2.0)
-  - SwiftLint (0.25.0)
-  - TrezorCrypto (0.0.5)
-  - TrustCore (0.0.4):
+  - BigInt (5.0.0)
+  - CryptoSwift (1.1.3)
+  - SwiftLint (0.36.0)
+  - SwiftProtobuf (1.7.0)
+  - TrezorCrypto (0.0.9)
+  - TrustCore (0.2.2):
     - BigInt
-    - TrezorCrypto
+    - SwiftProtobuf (~> 1.0)
+    - TrezorCrypto (~> 0.0.8)
 
 DEPENDENCIES:
   - BigInt
-  - CryptoSwift (~> 0.8.1)
+  - CryptoSwift
   - SwiftLint
   - TrezorCrypto
-  - TrustCore
+  - TrustCore (from `https://github.com/TrustWallet/trust-core`, branch `master`)
+
+SPEC REPOS:
+  trunk:
+    - BigInt
+    - CryptoSwift
+    - SwiftLint
+    - SwiftProtobuf
+    - TrezorCrypto
+
+EXTERNAL SOURCES:
+  TrustCore:
+    :branch: master
+    :git: https://github.com/TrustWallet/trust-core
+
+CHECKOUT OPTIONS:
+  TrustCore:
+    :commit: 833ec3f263bb9b257b6ec04359cb98d1bae7cf17
+    :git: https://github.com/TrustWallet/trust-core
 
 SPEC CHECKSUMS:
-  BigInt: 8e8a52161c745cd3ab78e3dc346a9fbee51e6cf6
-  CryptoSwift: 033efc3523865d19cc6ab6612fa17a62613b5dfa
-  SipHash: c6e9e43e9c531b5bc6602545130c26194a6d31ce
-  SwiftLint: e14651157288e9e01d6e1a71db7014fb5744a8ea
-  TrezorCrypto: ecef681446bf02af6248d3b5e394026d7e766e56
-  TrustCore: 305289e5b1d484d6fe935fc47c724f3ceeae4100
+  BigInt: 74b4d88367b0e819d9f77393549226d36faeb0d8
+  CryptoSwift: 6b6e488df0598b3e9fa49254ed1a65e8c1b1e10b
+  SwiftLint: fc9859e4e1752340664851f667bb1898b9c90114
+  SwiftProtobuf: 4fd9645e69b72cbae6ec8da5be0cdd20ca6565dd
+  TrezorCrypto: bfeea47a052dca2c77d4a39e1e183865e52de14d
+  TrustCore: 378c82221f4d28a75da133d049710f5030427176
 
-PODFILE CHECKSUM: 6022582b9cc05f0b0e516ee89ce9c8b57234b7cd
+PODFILE CHECKSUM: 8d7e1864cfd7834c63ccb55d95bf9792737e47eb
 
-COCOAPODS: 1.4.0
+COCOAPODS: 1.8.4
