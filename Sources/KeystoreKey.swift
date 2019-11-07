@@ -112,7 +112,8 @@ public struct KeystoreKey {
         print("公钥处理1")
         var sha3 = publicKey[1...].sha3(.keccak256)
         //个人修改
-        var data = Data(hex: "41")
+        let data = Data.init(hex: "41")//Data(hex: "41")
+//Data(hex: "41")
         data.append(sha3[12..<32])
         //个人修改
         print("公钥处理2")
@@ -180,7 +181,7 @@ public struct KeystoreKey {
             }
             defer {
                 // Clear memory after signing
-                mnemonic.clear()
+                replaceSubrange(startIndex ..< endIndex, with: repeatElement(Character(" "), count: count))
             }
             let wallet = Wallet(mnemonic: mnemonic, passphrase: passphrase, path: derivationPath)
             return EthereumCrypto.sign(hash: hash, privateKey: wallet.getKey(at: 0).privateKey)
@@ -209,7 +210,7 @@ public struct KeystoreKey {
             }
             defer {
                 // Clear memory after signing
-                mnemonic.clear()
+                replaceSubrange(startIndex ..< endIndex, with: repeatElement(Character(" "), count: count))
             }
             let wallet = Wallet(mnemonic: mnemonic)
             let key = wallet.getKey(at: 0).privateKey
