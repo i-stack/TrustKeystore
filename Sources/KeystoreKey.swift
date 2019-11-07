@@ -110,10 +110,9 @@ public struct KeystoreKey {
         precondition(publicKey.count == 65, "Expect 64-byte public key")
         precondition(publicKey[0] == 4, "Invalid public key")
         print("公钥处理1")
-        var sha3 = publicKey[1...].sha3(.keccak256)
+        let sha3 = publicKey[1...].sha3(.keccak256)
         //个人修改
-        let data = Data.init(hex: "41")//Data(hex: "41")
-//Data(hex: "41")
+        var data = Data.init(hex: "41")
         data.append(sha3[12..<32])
         //个人修改
         print("公钥处理2")
@@ -140,10 +139,10 @@ public struct KeystoreKey {
         let decryptedPK: [UInt8]
         switch crypto.cipher {
         case "aes-128-ctr":
-            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: .CTR(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
+            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: CTR(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
             decryptedPK = try aesCipher.decrypt(crypto.cipherText.bytes)
         case "aes-128-cbc":
-            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: .CBC(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
+            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: CBC(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
             decryptedPK = try aesCipher.decrypt(crypto.cipherText.bytes)
         default:
             throw DecryptError.unsupportedCipher
@@ -181,7 +180,7 @@ public struct KeystoreKey {
             }
             defer {
                 // Clear memory after signing
-                replaceSubrange(startIndex ..< endIndex, with: repeatElement(Character(" "), count: count))
+                mnemonic.replaceSubrange(mnemonic.startIndex ..< mnemonic.endIndex, with: repeatElement(Character(" "), count: mnemonic.count))
             }
             let wallet = Wallet(mnemonic: mnemonic, passphrase: passphrase, path: derivationPath)
             return EthereumCrypto.sign(hash: hash, privateKey: wallet.getKey(at: 0).privateKey)
@@ -210,7 +209,7 @@ public struct KeystoreKey {
             }
             defer {
                 // Clear memory after signing
-                replaceSubrange(startIndex ..< endIndex, with: repeatElement(Character(" "), count: count))
+                mnemonic.replaceSubrange(mnemonic.startIndex ..< mnemonic.endIndex, with: repeatElement(Character(" "), count: mnemonic.count))
             }
             let wallet = Wallet(mnemonic: mnemonic)
             let key = wallet.getKey(at: 0).privateKey
