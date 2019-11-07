@@ -180,9 +180,7 @@ public struct KeystoreKey {
             }
             defer {
                 // Clear memory after signing
-                mnemonic.withMutableCharacters { chars in
-                    chars.replaceSubrange(chars.startIndex ..< chars.endIndex, with: [Character](repeating: " ", count: chars.count))
-                }
+                mnemonic.clear()
             }
             let wallet = Wallet(mnemonic: mnemonic, passphrase: passphrase, path: derivationPath)
             return EthereumCrypto.sign(hash: hash, privateKey: wallet.getKey(at: 0).privateKey)
@@ -211,9 +209,7 @@ public struct KeystoreKey {
             }
             defer {
                 // Clear memory after signing
-                mnemonic.withMutableCharacters { chars in
-                    chars.replaceSubrange(chars.startIndex ..< chars.endIndex, with: [Character](repeating: " ", count: chars.count))
-                }
+                mnemonic.clear()
             }
             let wallet = Wallet(mnemonic: mnemonic)
             let key = wallet.getKey(at: 0).privateKey
