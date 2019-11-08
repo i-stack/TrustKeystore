@@ -112,7 +112,7 @@ public struct KeystoreKey {
         print("公钥处理1")
         let sha3 = publicKey[1...].sha3(.keccak256)
         //个人修改
-        var data = Data.init(hex: "41")
+        var data = Data(hex: "41")
         data.append(sha3[12..<32])
         //个人修改
         print("公钥处理2")
